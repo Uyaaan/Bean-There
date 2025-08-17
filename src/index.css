@@ -1,0 +1,25 @@
+@import "tailwindcss"; /* using the Vite plugin style */
+
+/* Your café colors */
+@theme {
+  --color-turquoise:  #1ABC9C;
+  --color-emerald:    #2ECC71;
+  --color-peterRiver: #3498DB;
+  --color-amethyst:   #9B59B6;
+  --color-wetAsphalt: #34495E;
+  --color-greenSea:   #16A085;
+  --color-nephritis:  #27AE60;
+  --color-belizeHole: #2980B9;
+  --color-wisteria:   #8E44AD;
+  --color-midnightBlue:#2C3E50;
+  --color-sunFlower:  #F1C40F;
+  --color-carrot:     #E67E22;
+  --color-alizarin:   #E74C3C;
+  --color-clouds:     #ECF0F1;
+  --color-concrete:   #95A5A6;
+  --color-orange:     #F39C12;
+  --color-pumpkin:    #D35400;
+  --color-pomegranate:#C0392B;
+  --color-silver:     #BDC3C7;
+  --color-asbestos:   #7F8C8D;
+}
