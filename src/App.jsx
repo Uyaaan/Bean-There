@@ -5,11 +5,11 @@ function App() {
         Bean There ☕
       </h1>
       <p className="text-lg text-wet-asphalt">
-        Our café journal starts here.
+        Hello baby shark!
       </p>
 
       <button className="mt-6 px-6 py-3 rounded bg-peter-river text-white hover:bg-belize-hole">
-        Add a Café
+        This button does absolutely nothing
       </button>
     </div>
   );
