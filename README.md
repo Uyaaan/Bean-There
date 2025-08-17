@@ -1,12 +1,11 @@
-# React + Vite
+Bean There ☕️
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A café rating web app we’re building with React + Tailwind CSS.
 
-Currently, two official plugins are available:
+Bean There is our little project where we can keep track of the cafés we visit together. Each spot can have:
+	•	📍 The café’s name, location, links, and images
+	•	⭐ Ratings for things like taste, price, mood, and ambience
+	•	✅ Checkboxes for details (WiFi, parking, outlets, work-friendly)
+	•	📝 Our own notes and opinions
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+It’s basically our shared coffee journal — a fun way to capture our experiences and memories while exploring new spots.
