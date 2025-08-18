@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 // Inline localStorage helpers so this page works even without separate utils
 const DB_KEY = "bean-there/db";
@@ -45,6 +45,12 @@ function RatingStars({ value = 0, onChange, max = 5, size = "text-xl" }) {
 
 export default function CafeNew() {
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Determine who is adding from query param
+  const byParam = (searchParams.get("by") || "uyan").toLowerCase();
+  const initialBy = byParam === "myc" ? "Myc" : "Uyan";
+  const [createdBy, setCreatedBy] = useState(initialBy);
 
   // Basic fields
   const [name, setName] = useState("");
@@ -62,30 +68,56 @@ export default function CafeNew() {
   ];
   const [features, setFeatures] = useState([]);
   const toggleFeature = (f) =>
-    setFeatures((prev) =>
-      prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]
-    );
+    setFeatures((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]));
 
-  // Item-level ratings
-  const [orders, setOrders] = useState([
-    { person: "Uyan", item: "", rating: 0, notes: "" },
-    { person: "Myc", item: "", rating: 0, notes: "" },
-  ]);
-  const [beverages, setBeverages] = useState([
-    { name: "", rating: 0, notes: "" },
-  ]);
-  const [foods, setFoods] = useState([{ name: "", rating: 0, notes: "" }]);
-  const [prices, setPrices] = useState([
-    { name: "", price: "", valueRating: 0, notes: "" },
-  ]);
+  // Single order tied to creator (no quick-note/price; just overall rating + notes)
+  const [order, setOrder] = useState({ person: initialBy, rating: 0, notes: "" });
 
-  // Row helpers
-  const addRow = (setter, emptyRow) =>
-    setter((prev) => [...prev, emptyRow]);
-  const removeRow = (setter, idx) =>
-    setter((prev) => prev.filter((_, i) => i !== idx));
+  // MULTIPLE drinks & foods
+  const [beverages, setBeverages] = useState([{ name: "", price: "", rating: 0, notes: "" }]);
+  const [foods, setFoods] = useState([{ name: "", price: "", rating: 0, notes: "" }]);
+
+  // Extra ambience ratings
+  const [vibe, setVibe] = useState(0);
+  const [staff, setStaff] = useState(0);
+  const [seats, setSeats] = useState(0);
+
+  // Helpers for dynamic rows
+  const addRow = (setter, emptyRow) => setter((prev) => [...prev, emptyRow]);
+  const removeRow = (setter, idx) => setter((prev) => prev.filter((_, i) => i !== idx));
   const updateRow = (setter, idx, key, val) =>
     setter((prev) => prev.map((row, i) => (i === idx ? { ...row, [key]: val } : row)));
+
+  // Computed helpers
+  const toNumber = (v) => (v === "" || v == null ? 0 : Number(v));
+  const formatPHP = (n) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(n || 0);
+  const foodBeverageTotal =
+    beverages.reduce((sum, b) => sum + toNumber(b.price), 0) +
+    foods.reduce((sum, f) => sum + toNumber(f.price), 0);
+
+  const sanitizeNamePriceRating = (arr) =>
+    arr
+      .filter((x) => x.name?.trim() || toNumber(x.price) || x.rating > 0 || x.notes?.trim())
+      .map((x) => ({
+        name: (x.name || "").trim(),
+        price: toNumber(x.price),
+        rating: x.rating || 0,
+        notes: (x.notes || "").trim(),
+      }));
+
+  function calcOverall() {
+    const nums = [
+      order.rating,
+      ...beverages.map((b) => b.rating).filter(Boolean),
+      ...foods.map((f) => f.rating).filter(Boolean),
+      vibe,
+      staff,
+      seats,
+    ].filter(Boolean);
+    if (!nums.length) return 0;
+    const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+    return Math.round(avg * 10) / 10;
+  }
 
   // Save handler
   const handleSave = (e) => {
@@ -93,69 +125,57 @@ export default function CafeNew() {
     if (!name.trim()) return alert("Café name is required");
 
     const now = new Date().toISOString();
+
     const cafe = {
       id: generateId("cf"),
       name: name.trim(),
       location: location.trim(),
       description: description.trim(),
       features,
-      rating: { overall: calcOverall() },
-      orders: sanitizeOrders(orders),
-      beverages: sanitizeNameRating(beverages),
-      foods: sanitizeNameRating(foods),
-      prices: sanitizePrices(prices),
+      rating: { overall: calcOverall(), vibe, staff, seats },
+      orders: [
+        {
+          person: order.person,
+          rating: order.rating || 0,
+          notes: (order.notes || "").trim(),
+        },
+      ],
+      beverages: sanitizeNamePriceRating(beverages),
+      foods: sanitizeNamePriceRating(foods),
       images: [],
       links: [],
       createdAt: now,
       updatedAt: now,
-      createdBy: "you",
+      createdBy,
     };
 
     upsertCafe(cafe);
     nav("/cafes");
   };
 
-  // Helpers for overall rating + cleanup
-  function calcOverall() {
-    const nums = [
-      ...orders.map((o) => o.rating).filter(Boolean),
-      ...beverages.map((b) => b.rating).filter(Boolean),
-      ...foods.map((f) => f.rating).filter(Boolean),
-      ...prices.map((p) => p.valueRating).filter(Boolean),
-    ];
-    if (!nums.length) return 0;
-    const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
-    return Math.round(avg * 10) / 10; // 1 decimal place
-  }
-
-  const sanitizeNameRating = (arr) =>
-    arr
-      .filter((x) => x.name?.trim())
-      .map((x) => ({ ...x, name: x.name.trim() }));
-
-  const sanitizeOrders = (arr) =>
-    arr
-      .filter((x) => x.item?.trim() || x.rating > 0)
-      .map((x) => ({
-        person: x.person?.trim() || "Unknown",
-        item: x.item.trim(),
-        rating: x.rating || 0,
-        notes: x.notes?.trim() || "",
-      }));
-
-  const sanitizePrices = (arr) =>
-    arr
-      .filter((x) => x.name?.trim())
-      .map((x) => ({
-        name: x.name.trim(),
-        price: Number(x.price) || 0,
-        valueRating: x.valueRating || 0,
-        notes: x.notes?.trim() || "",
-      }));
-
   return (
     <section className="max-w-3xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4">Add a Café</h2>
+      <h2 className="text-2xl font-bold mb-2">Add a Café</h2>
+
+      {/* Adding as toggle */}
+      <div className="mb-4 flex items-center gap-2">
+        <span className="text-sm text-slate-600">Adding as:</span>
+        {["Uyan", "Myc"].map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => {
+              setCreatedBy(p);
+              setOrder((prev) => ({ ...prev, person: p }));
+            }}
+            className={`rounded-lg border px-3 py-1.5 ${
+              createdBy === p ? "bg-emerald-600 text-white" : "hover:bg-slate-50"
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
 
       <form onSubmit={handleSave} className="space-y-8">
         {/* Basics */}
@@ -212,223 +232,156 @@ export default function CafeNew() {
           </div>
         </fieldset>
 
-        {/* Orders (per person) */}
-        <Section title="RATINGS – Orders">
-          {orders.map((o, i) => (
-            <Card key={i}>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium mb-1">Person</label>
-                  <input
-                    className="w-full rounded-lg border px-3 py-2"
-                    value={o.person}
-                    onChange={(e) => updateRow(setOrders, i, "person", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">Order (what did they get?)</label>
-                  <input
-                    className="w-full rounded-lg border px-3 py-2"
-                    placeholder="Iced latte"
-                    value={o.item}
-                    onChange={(e) => updateRow(setOrders, i, "item", e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-between mt-2">
-                <div>
-                  <span className="block text-xs font-medium mb-1">Rating</span>
-                  <RatingStars
-                    value={o.rating}
-                    onChange={(n) => updateRow(setOrders, i, "rating", n)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeRow(setOrders, i)}
-                  className="text-sm text-red-600 hover:underline"
-                >
-                  Remove
-                </button>
-              </div>
-              <div className="mt-2">
-                <label className="block text-xs font-medium mb-1">Description</label>
-                <textarea
-                  className="w-full rounded-lg border px-3 py-2"
-                  rows={2}
-                  value={o.notes}
-                  onChange={(e) => updateRow(setOrders, i, "notes", e.target.value)}
+        {/* Single combined order card */}
+        <Section title={`Order for ${createdBy}`}>
+          <Card>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium mb-1">Person</label>
+                <input
+                  className="w-full rounded-lg border px-3 py-2 bg-slate-50"
+                  value={order.person}
+                  readOnly
                 />
               </div>
-            </Card>
-          ))}
-          <AddButton
-            onClick={() =>
-              addRow(setOrders, { person: "", item: "", rating: 0, notes: "" })
-            }
-          >
-            Add another order
-          </AddButton>
+              <div>
+                <label className="block text-xs font-medium mb-1">Overall Rating</label>
+                <RatingStars value={order.rating} onChange={(n) => setOrder((prev) => ({ ...prev, rating: n }))} />
+              </div>
+            </div>
+
+            {/* Beverages (multiple) */}
+            <div className="mt-4">
+              <h4 className="font-semibold mb-2">Beverages</h4>
+              <div className="space-y-3">
+                {beverages.map((b, i) => (
+                  <div key={i} className="rounded-lg border p-3">
+                    <div className="grid sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Drink</label>
+                        <input
+                          className="w-full rounded-lg border px-3 py-2"
+                          placeholder="Hazelnut Latte"
+                          value={b.name}
+                          onChange={(e) => updateRow(setBeverages, i, "name", e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Price (₱)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          className="w-full rounded-lg border px-3 py-2"
+                          value={b.price}
+                          onChange={(e) => updateRow(setBeverages, i, "price", e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Rating</label>
+                        <RatingStars value={b.rating} onChange={(n) => updateRow(setBeverages, i, "rating", n)} />
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <label className="block text-xs font-medium mb-1">Notes</label>
+                      <textarea
+                        className="w-full rounded-lg border px-3 py-2"
+                        rows={2}
+                        value={b.notes}
+                        onChange={(e) => updateRow(setBeverages, i, "notes", e.target.value)}
+                      />
+                    </div>
+                    <div className="mt-2 text-right">
+                      <button type="button" onClick={() => removeRow(setBeverages, i)} className="text-sm text-red-600 hover:underline">Remove</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={() => addRow(setBeverages, { name: "", price: "", rating: 0, notes: "" })} className="mt-2 rounded-lg border px-4 py-2 hover:bg-slate-50">Add drink</button>
+            </div>
+
+            {/* Foods (multiple) */}
+            <div className="mt-6">
+              <h4 className="font-semibold mb-2">Food</h4>
+              <div className="space-y-3">
+                {foods.map((f, i) => (
+                  <div key={i} className="rounded-lg border p-3">
+                    <div className="grid sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Food</label>
+                        <input
+                          className="w-full rounded-lg border px-3 py-2"
+                          placeholder="Nachos"
+                          value={f.name}
+                          onChange={(e) => updateRow(setFoods, i, "name", e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Price (₱)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          className="w-full rounded-lg border px-3 py-2"
+                          value={f.price}
+                          onChange={(e) => updateRow(setFoods, i, "price", e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Rating</label>
+                        <RatingStars value={f.rating} onChange={(n) => updateRow(setFoods, i, "rating", n)} />
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <label className="block text-xs font-medium mb-1">Notes</label>
+                      <textarea
+                        className="w-full rounded-lg border px-3 py-2"
+                        rows={2}
+                        value={f.notes}
+                        onChange={(e) => updateRow(setFoods, i, "notes", e.target.value)}
+                      />
+                    </div>
+                    <div className="mt-2 text-right">
+                      <button type="button" onClick={() => removeRow(setFoods, i)} className="text-sm text-red-600 hover:underline">Remove</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={() => addRow(setFoods, { name: "", price: "", rating: 0, notes: "" })} className="mt-2 rounded-lg border px-4 py-2 hover:bg-slate-50">Add food</button>
+            </div>
+
+            {/* Ambience ratings */}
+            <div className="mt-6 grid sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium mb-1">Vibe</label>
+                <RatingStars value={vibe} onChange={setVibe} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Staff</label>
+                <RatingStars value={staff} onChange={setStaff} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Seats</label>
+                <RatingStars value={seats} onChange={setSeats} />
+              </div>
+            </div>
+
+            {/* Order notes */}
+            <div className="mt-4">
+              <label className="block text-xs font-medium mb-1">Overall Experience</label>
+              <textarea
+                className="w-full rounded-lg border px-3 py-2"
+                rows={2}
+                value={order.notes}
+                onChange={(e) => setOrder((prev) => ({ ...prev, notes: e.target.value }))}
+              />
+            </div>
+          </Card>
         </Section>
 
-        {/* Beverages */}
-        <Section title="Beverages">
-          {beverages.map((b, i) => (
-            <Card key={i}>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium mb-1">Drink</label>
-                  <input
-                    className="w-full rounded-lg border px-3 py-2"
-                    placeholder="Hazelnut Latte"
-                    value={b.name}
-                    onChange={(e) => updateRow(setBeverages, i, "name", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">Rating</label>
-                  <RatingStars
-                    value={b.rating}
-                    onChange={(n) => updateRow(setBeverages, i, "rating", n)}
-                  />
-                </div>
-              </div>
-              <div className="mt-2">
-                <label className="block text-xs font-medium mb-1">Description</label>
-                <textarea
-                  className="w-full rounded-lg border px-3 py-2"
-                  rows={2}
-                  value={b.notes}
-                  onChange={(e) => updateRow(setBeverages, i, "notes", e.target.value)}
-                />
-              </div>
-              <div className="mt-2 text-right">
-                <button
-                  type="button"
-                  onClick={() => removeRow(setBeverages, i)}
-                  className="text-sm text-red-600 hover:underline"
-                >
-                  Remove
-                </button>
-              </div>
-            </Card>
-          ))}
-          <AddButton
-            onClick={() => addRow(setBeverages, { name: "", rating: 0, notes: "" })}
-          >
-            Add a drink
-          </AddButton>
-        </Section>
-
-        {/* Foods */}
-        <Section title="Food">
-          {foods.map((f, i) => (
-            <Card key={i}>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium mb-1">Food</label>
-                  <input
-                    className="w-full rounded-lg border px-3 py-2"
-                    placeholder="Nachos"
-                    value={f.name}
-                    onChange={(e) => updateRow(setFoods, i, "name", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">Rating</label>
-                  <RatingStars
-                    value={f.rating}
-                    onChange={(n) => updateRow(setFoods, i, "rating", n)}
-                  />
-                </div>
-              </div>
-              <div className="mt-2">
-                <label className="block text-xs font-medium mb-1">Description</label>
-                <textarea
-                  className="w-full rounded-lg border px-3 py-2"
-                  rows={2}
-                  value={f.notes}
-                  onChange={(e) => updateRow(setFoods, i, "notes", e.target.value)}
-                />
-              </div>
-              <div className="mt-2 text-right">
-                <button
-                  type="button"
-                  onClick={() => removeRow(setFoods, i)}
-                  className="text-sm text-red-600 hover:underline"
-                >
-                  Remove
-                </button>
-              </div>
-            </Card>
-          ))}
-          <AddButton
-            onClick={() => addRow(setFoods, { name: "", rating: 0, notes: "" })}
-          >
-            Add a food
-          </AddButton>
-        </Section>
-
-        {/* Prices */}
-        <Section title="Price">
-          {prices.map((p, i) => (
-            <Card key={i}>
-              <div className="grid sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium mb-1">Item</label>
-                  <input
-                    className="w-full rounded-lg border px-3 py-2"
-                    placeholder="Hazelnut add-on"
-                    value={p.name}
-                    onChange={(e) => updateRow(setPrices, i, "name", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">Price (₱)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    className="w-full rounded-lg border px-3 py-2"
-                    value={p.price}
-                    onChange={(e) => updateRow(setPrices, i, "price", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">Price Rating</label>
-                  <RatingStars
-                    value={p.valueRating}
-                    onChange={(n) => updateRow(setPrices, i, "valueRating", n)}
-                  />
-                </div>
-              </div>
-              <div className="mt-2">
-                <label className="block text-xs font-medium mb-1">Description</label>
-                <textarea
-                  className="w-full rounded-lg border px-3 py-2"
-                  rows={2}
-                  value={p.notes}
-                  onChange={(e) => updateRow(setPrices, i, "notes", e.target.value)}
-                />
-              </div>
-              <div className="mt-2 text-right">
-                <button
-                  type="button"
-                  onClick={() => removeRow(setPrices, i)}
-                  className="text-sm text-red-600 hover:underline"
-                >
-                  Remove
-                </button>
-              </div>
-            </Card>
-          ))}
-          <AddButton
-            onClick={() =>
-              addRow(setPrices, { name: "", price: "", valueRating: 0, notes: "" })
-            }
-          >
-            Add a price item
-          </AddButton>
-        </Section>
+        {/* Totals */}
+        <div className="flex items-center justify-end text-sm text-slate-700">
+          <span className="mr-2">Total (Food + Beverage):</span>
+          <strong>{formatPHP(foodBeverageTotal)}</strong>
+        </div>
 
         {/* Save */}
         <div className="flex items-center justify-between">
@@ -453,16 +406,4 @@ function Section({ title, children }) {
 
 function Card({ children }) {
   return <div className="rounded-xl border bg-white p-4">{children}</div>;
-}
-
-function AddButton({ onClick, children }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="mt-2 rounded-lg border px-4 py-2 hover:bg-slate-50"
-    >
-      {children}
-    </button>
-  );
 }
