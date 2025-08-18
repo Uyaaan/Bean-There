@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { createCafe } from "../services/cafes.api";
 
 // Inline localStorage helpers so this page works even without separate utils
 const DB_KEY = "bean-there/db";
@@ -20,6 +21,19 @@ function upsertCafe(cafe) {
   if (idx === -1) db.cafes.push(cafe);
   else db.cafes[idx] = cafe;
   saveDB(db);
+}
+
+function featuresToBooleans(list) {
+  const set = new Set(list);
+  return {
+    wifi: set.has("wifi"),
+    parking: set.has("parking"),
+    outlets: set.has("outlets"),
+    work_friendly: set.has("work_friendly"),
+    // Not in DB yet, kept for UI only:
+    // time_limit: set.has("time_limit"),
+    // outdoor_seating: set.has("outdoor_seating"),
+  };
 }
 
 // Tiny star rating component
@@ -120,13 +134,14 @@ export default function CafeNew() {
   }
 
   // Save handler
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
     if (!name.trim()) return alert("Café name is required");
 
     const now = new Date().toISOString();
 
-    const cafe = {
+    // Rich object for local fallback
+    const cafeLocal = {
       id: generateId("cf"),
       name: name.trim(),
       location: location.trim(),
@@ -149,7 +164,50 @@ export default function CafeNew() {
       createdBy,
     };
 
-    upsertCafe(cafe);
+    // Map features -> booleans for DB schema
+    const f = featuresToBooleans(features);
+
+    // Compute simple aggregates for DB schema
+    const itemRatings = [
+      order.rating,
+      ...beverages.map((b) => b.rating).filter(Boolean),
+      ...foods.map((x) => x.rating).filter(Boolean),
+    ].filter(Boolean);
+    const tasteAvg = itemRatings.length
+      ? Math.round(itemRatings.reduce((a, b) => a + b, 0) / itemRatings.length)
+      : 0;
+
+    const allItems = beverages.concat(foods);
+    const avgPrice =
+      allItems.reduce((s, x) => s + (Number(x.price) || 0), 0) /
+      Math.max(1, allItems.length);
+    // naive bucket: 0–100→1, 101–150→2, 151–200→3, 201–250→4, >250→5
+    const priceBucket =
+      avgPrice <= 100 ? 1 : avgPrice <= 150 ? 2 : avgPrice <= 200 ? 3 : avgPrice <= 250 ? 4 : 5;
+
+    const cafeDB = {
+      name: cafeLocal.name,
+      location_text: cafeLocal.location,
+      description: cafeLocal.description,
+      taste: tasteAvg || 0,
+      price: priceBucket || 0,
+      mood: vibe || 0,
+      place: seats || 0,
+      wifi: f.wifi,
+      parking: f.parking,
+      outlets: f.outlets,
+      work_friendly: f.work_friendly,
+      links: [],   // keep empty for now
+      images: [],  // keep empty for now (Storage later)
+    };
+
+    try {
+      await createCafe(cafeDB); // write to Supabase
+    } catch (err) {
+      console.error("Supabase save failed, falling back to local:", err);
+      upsertCafe(cafeLocal);    // fallback so data isn't lost
+    }
+
     nav("/cafes");
   };
 
@@ -226,7 +284,7 @@ export default function CafeNew() {
                   checked={features.includes(f)}
                   onChange={() => toggleFeature(f)}
                 />
-                <span className="text-sm">{f.replace("_", " ")}</span>
+                <span className="text-sm">{f.replaceAll("_", " ")}</span>
               </label>
             ))}
           </div>
