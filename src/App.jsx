@@ -3,6 +3,9 @@ import Home from "./pages/Home";
 import CafesList from "./pages/CafesList";
 import CafeNew from "./pages/CafeNew";
 import CafeDetail from "./pages/CafeDetail";
+import { useEffect } from "react";
+import { supabase } from "./services/supabaseClient";
+
 
 function Shell() {
   return (
