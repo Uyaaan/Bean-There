@@ -1,4 +1,8 @@
+import { useNavigate } from "react-router-dom";
+
 export default function Home() {
+  const nav = useNavigate();
+
   return (
     <section className="grid place-items-center py-16">
       <div className="text-center space-y-4">
@@ -8,13 +12,19 @@ export default function Home() {
         <p className="text-slate-600 max-w-prose mx-auto">
           Hello baby shark! This is our cozy space to rate cafés and keep memories.
         </p>
-        <div className="pt-4">
-          <a
-            href="/cafes/new"
-            className="inline-block rounded-lg bg-emerald-600 text-white px-5 py-3 hover:bg-emerald-700"
+        <div className="pt-4 flex gap-3 justify-center">
+          <button
+            onClick={() => nav("/cafes/new?by=uyan")}
+            className="rounded-lg bg-emerald-600 text-white px-5 py-3 hover:bg-emerald-700"
           >
-            Add our first café
-          </a>
+            Add as Uyan
+          </button>
+          <button
+            onClick={() => nav("/cafes/new?by=myc")}
+            className="rounded-lg bg-emerald-600 text-white px-5 py-3 hover:bg-emerald-700"
+          >
+            Add as Myc
+          </button>
         </div>
       </div>
     </section>
