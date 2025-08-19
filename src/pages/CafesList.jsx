@@ -5,23 +5,49 @@ import { supabase } from "../services/supabaseClient";
 
 // Helpers
 function toNumber(v) {
-  return v === "" || v == null ? 0 : Number(v);
+  if (v === "" || v == null) return 0;
+  const n = Number(typeof v === "string" ? v.replace(/,/g, "") : v);
+  return Number.isFinite(n) ? n : 0;
 }
 function formatPHP(n) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(n || 0);
 }
 function totalCost(cafe) {
-  const bev = (cafe?.beverages || []).reduce((sum, b) => sum + toNumber(b.price), 0);
-  const food = (cafe?.foods || []).reduce((sum, f) => sum + toNumber(f.price), 0);
-  return bev + food;
+  // Support multiple shapes (price, qty) and fallbacks from CafeNew
+  const bevArr = cafe?.beverages || cafe?.beverageItems || [];
+  const foodArr = cafe?.foods || cafe?.foodItems || [];
+  const sumArr = (arr) =>
+    (Array.isArray(arr) ? arr : []).reduce((sum, item) => {
+      const price = toNumber(item.price ?? item.unitPrice ?? item.cost ?? 0);
+      const qty = toNumber(item.qty ?? item.quantity ?? 1) || 1;
+      return sum + price * qty;
+    }, 0);
+  const bev = sumArr(bevArr);
+  const food = sumArr(foodArr);
+  const fallback = toNumber(cafe?.orderTotal ?? cafe?.total ?? 0);
+  const computed = bev + food;
+  return computed > 0 ? computed : fallback;
+}
+function getOverallRating(cafe) {
+  // Try common field names and coerce to number
+  const val =
+    cafe?.rating?.overall ??
+    cafe?.rating?.average ??
+    cafe?.overallRating ??
+    cafe?.rating_overall ??
+    cafe?.rating ?? 0;
+  const n = Number(val);
+  return Number.isFinite(n) ? n : 0;
 }
 function MiniStars({ value = 0, max = 5 }) {
-  const n = Math.round(value);
+  const n = Math.max(0, Math.min(max, Math.round(Number(value) || 0)));
   const stars = Array.from({ length: max }, (_, i) => (i < n ? "★" : "☆"));
   return (
-    <span className="inline-flex items-center gap-1 text-amber-600" title={`${value}/${max}`}>
-      <span className="leading-none">{stars.join("")}</span>
-      <span className="text-xs text-slate-500">{value ?? 0}</span>
+    <span className="inline-flex items-center gap-1 text-amber-600" aria-label={`${n} out of ${max} stars`}>
+      <span className="leading-none" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
+        {stars.join("")}
+      </span>
+      <span className="text-xs text-slate-500">{(Number(value) || 0).toFixed(1)}</span>
     </span>
   );
 }
@@ -91,7 +117,7 @@ export default function CafesList() {
           <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {cafes.map((cafe) => {
               const total = totalCost(cafe);
-              const overall = cafe?.rating?.overall ?? 0;
+              const overall = getOverallRating(cafe);
 
               return (
                 <li key={cafe.id} className="rounded-xl border bg-white p-4 flex flex-col">

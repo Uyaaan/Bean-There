@@ -10,7 +10,7 @@ export default function Home() {
           Bean There ☕
         </h1>
         <p className="text-slate-600 max-w-prose mx-auto">
-          Hello baby shark! This is our cozy space to rate cafés and keep memories.
+          Welcome to Bean There! for me and Myc to share our favorite cafés. Kahit onti palang ang nasusubukan {">"}.{"<"}
         </p>
         <div className="pt-4 flex gap-3 justify-center">
           <button
