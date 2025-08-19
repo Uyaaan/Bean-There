@@ -3,6 +3,7 @@ import Home from "./pages/Home";
 import CafesList from "./pages/CafesList";
 import CafeNew from "./pages/CafeNew";
 import CafeDetail from "./pages/CafeDetail";
+import CafeEdit from "./pages/CafeEdit";
 import { useEffect } from "react";
 import { supabase } from "./services/supabaseClient";
 
@@ -62,6 +63,7 @@ export default function App() {
         <Route path="cafes" element={<CafesList />} />
         <Route path="cafes/new" element={<CafeNew />} />
         <Route path="cafes/:id" element={<CafeDetail />} />
+        <Route path="cafes/:id/edit" element={<CafeEdit />} />
       </Route>
     </Routes>
   );
